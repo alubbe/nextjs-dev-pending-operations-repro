@@ -1,0 +1,21 @@
+{
+  "name": "nextjs-dev-pending-operations-repro",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Minimal Next.js dev-mode memory retention repro for RSC pendingOperations tracking",
+  "scripts": {
+    "dev": "NODE_OPTIONS='--expose-gc' NEXT_TELEMETRY_DISABLED=1 next dev -p 8136",
+    "build": "next build",
+    "start": "next start -p 8136",
+    "repro:noop": "node scripts/repro-loop.mjs http://localhost:8136 40 250 1 noop race 1 0 10",
+    "repro:console": "node scripts/repro-loop.mjs http://localhost:8136 40 250 1 console race 250 0 10"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "next": "16.1.6",
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  }
+}
