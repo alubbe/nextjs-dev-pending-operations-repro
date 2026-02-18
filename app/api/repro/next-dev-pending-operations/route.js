@@ -1,4 +1,4 @@
-import { runReproBatch } from '../../../../../lib/reproRunner.js';
+import { runReproBatch } from '../../../../lib/reproRunner.js';
 
 const STATE_KEY = Symbol.for('nextjs-repro.pending-operations.state');
 const DEFAULT_GC_PASSES = 3;
