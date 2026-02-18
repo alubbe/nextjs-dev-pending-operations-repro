@@ -1,6 +1,6 @@
 # Next.js dev pendingOperations repro
 
-Minimal reproducible example for suspected dev-mode memory retention in Next.js/React Server Components async tracking (`pendingOperations`).
+Minimal reproducible example for suspected dev-mode memory retention in Next.js/React Server Actions async tracking (`pendingOperations`).
 
 ## Versions
 
@@ -15,7 +15,7 @@ pnpm install
 pnpm run dev
 ```
 
-This starts Next dev on `http://localhost:8136` with `--expose-gc`.
+This starts Next dev on `http://localhost:8136` with inspect + GC enabled.
 
 ## Reproduce drift
 
@@ -27,29 +27,26 @@ pnpm run repro:noop
 
 The script prints:
 
-- `routeHeapDelta`: per-request heap delta from the route response
-- `postGcHeap`: heap after forced GC status check
-- `baselineDelta`: current post-GC heap minus initial post-GC baseline
+- `heapUsedStart`: heap after a reset + 3 forced GCs
+- `heapUsedEnd`: heap after all repro requests + 3 forced GCs
 
-If the issue reproduces, `baselineDelta` trends upward over loops.
+Both values are taken from the Next dev process and can be compared directly.
 
-## API endpoint
+## Repro surface
 
-- `GET/POST /api/repro/next-dev-pending-operations`
+- `GET /repro-server-actions`: page with a form-bound Server Action
+- `POST /repro-server-actions`: form submission path used to invoke the Server Action
 
-Query params:
+The runner script discovers the hidden action token from the page, then submits:
 
-- `action`: `request` (default), `status`, `reset`
+- `action`: `request`, `status`, `reset`
 - `mode`: `noop` or `console`
 - `ready`: `race`, `event`, `none`
-- `depth`: async steps per sequence (default `250`)
-- `parallel`: number of concurrent sequences (default `1`)
-- `logEvery`: console frequency in `console` mode
-- `stepDelayMs`: optional delay per step (default `0`)
-- `gc=1&gcPasses=N`: force GC on `status/reset`
+- `depth`, `parallel`, `logEvery`, `stepDelayMs`
+- `gc`, `gcPasses`
 
 ## Notes
 
 - No external API calls are used.
 - No production keys are required.
-- The route is disabled in production (`404`).
+- The Server Action page is intended for dev-mode repro only.
