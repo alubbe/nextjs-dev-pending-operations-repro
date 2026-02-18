@@ -11,8 +11,8 @@ Minimal reproducible example for suspected dev-mode memory retention in Next.js/
 ## Run
 
 ```bash
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 This starts Next dev on `http://localhost:8136` with `--expose-gc`.
@@ -22,7 +22,7 @@ This starts Next dev on `http://localhost:8136` with `--expose-gc`.
 In another terminal:
 
 ```bash
-npm run repro:noop
+pnpm run repro:noop
 ```
 
 The script prints:
