@@ -53,10 +53,6 @@ function getReadyMode(raw) {
   return 'race';
 }
 
-function getMode(raw) {
-  return raw === 'console' ? 'console' : 'noop';
-}
-
 async function runForcedGcCycle(passes) {
   const gcFn = globalThis.gc;
   if (typeof gcFn !== 'function') {
@@ -106,7 +102,6 @@ async function handle(request) {
     logEvery: clampInt(url.searchParams.get('logEvery'), 1, 1, 10000),
     stepDelayMs: clampInt(url.searchParams.get('stepDelayMs'), 0, 0, 1000),
     readyMode: getReadyMode(url.searchParams.get('ready')),
-    mode: getMode(url.searchParams.get('mode')),
   };
 
   const before = getMemorySnapshot();

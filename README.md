@@ -22,7 +22,9 @@ This starts Next dev on `http://localhost:8136` with inspect + GC enabled.
 In another terminal:
 
 ```bash
-pnpm run repro:noop
+pnpm run repro:server-action
+# or
+pnpm run repro:api
 ```
 
 The script prints:
@@ -34,13 +36,15 @@ Both values are taken from the Next dev process and can be compared directly.
 
 ## Repro surface
 
+- `GET/POST /api/repro/next-dev-pending-operations`: API-driven repro path
 - `GET /repro-server-actions`: page with a form-bound Server Action
 - `POST /repro-server-actions`: form submission path used to invoke the Server Action
 
-The runner script discovers the hidden action token from the page, then submits:
+Both paths execute the same console-heavy async batch (`runReproBatch`).
+
+The runner submits:
 
 - `action`: `request`, `status`, `reset`
-- `mode`: `noop` or `console`
 - `ready`: `race`, `event`, `none`
 - `depth`, `parallel`, `logEvery`, `stepDelayMs`
 - `gc`, `gcPasses`

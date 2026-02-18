@@ -5,60 +5,100 @@ const [
   loopsArg = '400',
   depthArg = '250',
   parallelArg = '1',
-  modeArg = 'noop',
   readyArg = 'race',
-  logEveryArg = '1',
+  logEveryArg = '250',
   stepDelayMsArg = '0',
   gcPassesArg = '3',
-  pagePathArg = '/repro-server-actions',
+  driverArg = 'server-action',
+  targetPathArg = '',
 ] = process.argv.slice(2);
 
 const baseUrl = baseUrlArg.replace(/\/$/, '');
 const loops = asInt(loopsArg, 400, 1, 5000);
 const depth = asInt(depthArg, 250, 1, 10000);
 const parallel = asInt(parallelArg, 1, 1, 32);
-const logEvery = asInt(logEveryArg, 1, 1, 100000);
+const logEvery = asInt(logEveryArg, 250, 1, 100000);
 const stepDelayMs = asInt(stepDelayMsArg, 0, 0, 1000);
 const gcPasses = asInt(gcPassesArg, 3, 1, 100);
-const mode = modeArg === 'console' ? 'console' : 'noop';
 const ready = readyArg === 'event' || readyArg === 'none' ? readyArg : 'race';
-const pagePath = normalizePagePath(pagePathArg);
+const driver = driverArg === 'api' ? 'api' : 'server-action';
+const targetPath = normalizePath(
+  targetPathArg || (driver === 'api' ? '/api/repro/next-dev-pending-operations' : '/repro-server-actions'),
+);
 
-const descriptor = await discoverActionDescriptor(baseUrl, pagePath);
-
-await invokeServerAction(baseUrl, descriptor, {
-  action: 'reset',
-  gc: '1',
-  gcPasses,
-});
-
-const baseline = await fetchReproState(baseUrl, pagePath);
-const baselineHeap = readHeapUsed(baseline);
-console.log(`heapUsedStart ${baselineHeap}`);
-
-for (let i = 1; i <= loops; i++) {
-  await invokeServerAction(baseUrl, descriptor, {
-    action: 'request',
-    mode,
-    ready,
-    depth,
-    parallel,
-    logEvery,
-    stepDelayMs,
-  });
+if (driver === 'api') {
+  await runViaApi();
+} else {
+  await runViaServerAction();
 }
 
-await invokeServerAction(baseUrl, descriptor, {
-  action: 'status',
-  gc: '1',
-  gcPasses,
-});
+async function runViaApi() {
+  await invokeApiAction('reset', { gc: '1', gcPasses });
 
-const finalStatus = await fetchReproState(baseUrl, pagePath);
-const finalHeap = readHeapUsed(finalStatus);
-console.log(`heapUsedEnd ${finalHeap}`);
+  const baseline = await invokeApiAction('status', { gc: '1', gcPasses });
+  const baselineHeap = numberOrZero(baseline?.memory?.heapUsed);
+  console.log(`heapUsedStart ${baselineHeap}`);
 
-function normalizePagePath(value) {
+  for (let i = 1; i <= loops; i++) {
+    await invokeApiAction(
+      'request',
+      { ready, depth, parallel, logEvery, stepDelayMs },
+      { method: 'POST' },
+    );
+  }
+
+  const finalStatus = await invokeApiAction('status', { gc: '1', gcPasses });
+  const finalHeap = numberOrZero(finalStatus?.memory?.heapUsed);
+  console.log(`heapUsedEnd ${finalHeap}`);
+}
+
+async function runViaServerAction() {
+  const descriptor = await discoverActionDescriptor(baseUrl, targetPath);
+
+  await invokeServerAction(baseUrl, descriptor, {
+    action: 'reset',
+    gc: '1',
+    gcPasses,
+  });
+
+  const baseline = await fetchReproState(baseUrl, targetPath);
+  const baselineHeap = readHeapUsed(baseline);
+  console.log(`heapUsedStart ${baselineHeap}`);
+
+  for (let i = 1; i <= loops; i++) {
+    await invokeServerAction(baseUrl, descriptor, {
+      action: 'request',
+      ready,
+      depth,
+      parallel,
+      logEvery,
+      stepDelayMs,
+    });
+  }
+
+  await invokeServerAction(baseUrl, descriptor, {
+    action: 'status',
+    gc: '1',
+    gcPasses,
+  });
+
+  const finalStatus = await fetchReproState(baseUrl, targetPath);
+  const finalHeap = readHeapUsed(finalStatus);
+  console.log(`heapUsedEnd ${finalHeap}`);
+}
+
+async function invokeApiAction(action, params, init = {}) {
+  const query = new URLSearchParams();
+  query.set('action', action);
+  for (const [key, value] of Object.entries(params)) {
+    query.set(key, String(value));
+  }
+
+  const method = init.method ?? (action === 'request' ? 'POST' : 'GET');
+  return fetchJson(`${baseUrl}${targetPath}?${query.toString()}`, { ...init, method });
+}
+
+function normalizePath(value) {
   if (!value) return '/repro-server-actions';
   return value.startsWith('/') ? value : `/${value}`;
 }
@@ -177,4 +217,22 @@ async function fetchText(url, init) {
   }
 
   return text;
+}
+
+async function fetchJson(url, init) {
+  const response = await fetch(url, init);
+  const text = await response.text();
+
+  let payload = {};
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    payload = {};
+  }
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status} for ${url}\n${text}`);
+  }
+
+  return payload;
 }

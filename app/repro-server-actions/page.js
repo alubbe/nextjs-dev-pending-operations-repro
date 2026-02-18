@@ -57,10 +57,6 @@ function getReadyMode(raw) {
   return 'race';
 }
 
-function getMode(raw) {
-  return raw === 'console' ? 'console' : 'noop';
-}
-
 function noGcResult() {
   return { requested: false, available: false, passes: 0 };
 }
@@ -139,7 +135,6 @@ export default function ReproServerActionsPage() {
       logEvery: clampInt(formData.get('logEvery'), 1, 1, 10000),
       stepDelayMs: clampInt(formData.get('stepDelayMs'), 0, 0, 1000),
       readyMode: getReadyMode(formData.get('ready')),
-      mode: getMode(formData.get('mode')),
     };
 
     const before = getMemorySnapshot();

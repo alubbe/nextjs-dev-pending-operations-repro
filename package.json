@@ -7,8 +7,8 @@
     "dev": "NODE_OPTIONS='--inspect=9230 --expose-gc --heapsnapshot-signal=SIGUSR2' NEXT_TELEMETRY_DISABLED=1 next dev -p 8136",
     "build": "next build",
     "start": "next start -p 8136",
-    "repro:noop": "node scripts/repro-loop.mjs http://localhost:8136 400 250 1 noop race 1 0 3",
-    "repro:console": "node scripts/repro-loop.mjs http://localhost:8136 400 250 1 console race 250 0 3"
+    "repro:server-action": "node scripts/repro-loop.mjs http://localhost:8136 400 250 1 race 250 0 3 server-action /repro-server-actions",
+    "repro:api": "node scripts/repro-loop.mjs http://localhost:8136 400 250 1 race 250 0 3 api /api/repro/next-dev-pending-operations"
   },
   "engines": {
     "node": ">=20.0.0"
