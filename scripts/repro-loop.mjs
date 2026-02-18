@@ -8,94 +8,56 @@ const [
   readyArg = 'race',
   logEveryArg = '250',
   stepDelayMsArg = '0',
-  gcPassesArg = '3',
   driverArg = 'server-action',
   targetPathArg = '',
 ] = process.argv.slice(2);
 
 const baseUrl = baseUrlArg.replace(/\/$/, '');
-const loops = asInt(loopsArg, 400, 1, 5000);
-const depth = asInt(depthArg, 250, 1, 10000);
-const parallel = asInt(parallelArg, 1, 1, 32);
-const logEvery = asInt(logEveryArg, 250, 1, 100000);
-const stepDelayMs = asInt(stepDelayMsArg, 0, 0, 1000);
-const gcPasses = asInt(gcPassesArg, 3, 1, 100);
-const ready = readyArg === 'event' || readyArg === 'none' ? readyArg : 'race';
+const options = {
+  loops: asInt(loopsArg, 400, 1, 10000),
+  depth: asInt(depthArg, 250, 1, 10000),
+  parallel: asInt(parallelArg, 1, 1, 32),
+  ready: readyArg === 'event' || readyArg === 'none' ? readyArg : 'race',
+  logEvery: asInt(logEveryArg, 250, 1, 100000),
+  stepDelayMs: asInt(stepDelayMsArg, 0, 0, 1000),
+};
+
 const driver = driverArg === 'api' ? 'api' : 'server-action';
 const targetPath = normalizePath(
   targetPathArg || (driver === 'api' ? '/api/repro/next-dev-pending-operations' : '/repro-server-actions'),
 );
 
-if (driver === 'api') {
-  await runViaApi();
-} else {
-  await runViaServerAction();
-}
+const result = driver === 'api' ? await runViaApi() : await runViaServerAction();
+console.log(`heapUsedStart ${numberOrZero(result.heapUsedStart)}`);
+console.log(`heapUsedEnd ${numberOrZero(result.heapUsedEnd)}`);
 
 async function runViaApi() {
-  await invokeApiAction('reset', { gc: '1', gcPasses });
-
-  const baseline = await invokeApiAction('status', { gc: '1', gcPasses });
-  const baselineHeap = numberOrZero(baseline?.memory?.heapUsed);
-  console.log(`heapUsedStart ${baselineHeap}`);
-
-  for (let i = 1; i <= loops; i++) {
-    await invokeApiAction(
-      'request',
-      { ready, depth, parallel, logEvery, stepDelayMs },
-      { method: 'POST' },
-    );
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(options)) {
+    query.set(key, String(value));
   }
 
-  const finalStatus = await invokeApiAction('status', { gc: '1', gcPasses });
-  const finalHeap = numberOrZero(finalStatus?.memory?.heapUsed);
-  console.log(`heapUsedEnd ${finalHeap}`);
+  return fetchJson(`${baseUrl}${targetPath}?${query.toString()}`, { method: 'POST' });
 }
 
 async function runViaServerAction() {
   const descriptor = await discoverActionDescriptor(baseUrl, targetPath);
-
-  await invokeServerAction(baseUrl, descriptor, {
-    action: 'reset',
-    gc: '1',
-    gcPasses,
-  });
-
-  const baseline = await fetchReproState(baseUrl, targetPath);
-  const baselineHeap = readHeapUsed(baseline);
-  console.log(`heapUsedStart ${baselineHeap}`);
-
-  for (let i = 1; i <= loops; i++) {
-    await invokeServerAction(baseUrl, descriptor, {
-      action: 'request',
-      ready,
-      depth,
-      parallel,
-      logEvery,
-      stepDelayMs,
-    });
+  const { redirectLocation, html } = await invokeServerAction(baseUrl, descriptor, options);
+  let snapshot = parseReproResultFromLocation(redirectLocation);
+  if (!snapshot && html) {
+    snapshot = parseReproResultFromHtml(html);
+  }
+  if (!snapshot) {
+    const fallbackPath = redirectLocation
+      ? `${new URL(redirectLocation, baseUrl).pathname}${new URL(redirectLocation, baseUrl).search}`
+      : targetPath;
+    snapshot = await fetchReproResult(baseUrl, fallbackPath);
+  }
+  if (typeof snapshot.heapUsedStart !== 'number' || typeof snapshot.heapUsedEnd !== 'number') {
+    throw new Error(`Server Action did not produce a repro result at ${targetPath}`);
   }
 
-  await invokeServerAction(baseUrl, descriptor, {
-    action: 'status',
-    gc: '1',
-    gcPasses,
-  });
-
-  const finalStatus = await fetchReproState(baseUrl, targetPath);
-  const finalHeap = readHeapUsed(finalStatus);
-  console.log(`heapUsedEnd ${finalHeap}`);
-}
-
-async function invokeApiAction(action, params, init = {}) {
-  const query = new URLSearchParams();
-  query.set('action', action);
-  for (const [key, value] of Object.entries(params)) {
-    query.set(key, String(value));
-  }
-
-  const method = init.method ?? (action === 'request' ? 'POST' : 'GET');
-  return fetchJson(`${baseUrl}${targetPath}?${query.toString()}`, { ...init, method });
+  return snapshot;
 }
 
 function normalizePath(value) {
@@ -111,15 +73,6 @@ function asInt(raw, fallback, min, max) {
 
 function numberOrZero(value) {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
-}
-
-function readHeapUsed(snapshot) {
-  const fromLastResult = snapshot?.lastResult?.memory?.heapUsed;
-  if (typeof fromLastResult === 'number') {
-    return numberOrZero(fromLastResult);
-  }
-
-  return numberOrZero(snapshot?.memory?.heapUsed);
 }
 
 function getAttribute(tag, name) {
@@ -140,7 +93,6 @@ function decodeHtml(text) {
 async function discoverActionDescriptor(baseUrlValue, actionPagePath) {
   const html = await fetchText(`${baseUrlValue}${actionPagePath}`);
   const formMatch = html.match(/<form[^>]*id=(["'])repro-action-form\1[^>]*>([\s\S]*?)<\/form>/i);
-
   if (!formMatch) {
     throw new Error(`Could not find #repro-action-form at ${actionPagePath}`);
   }
@@ -153,9 +105,7 @@ async function discoverActionDescriptor(baseUrlValue, actionPagePath) {
 
   for (const input of hiddenInputs) {
     const name = getAttribute(input[0], 'name');
-    if (!name || !name.startsWith('$ACTION_')) {
-      continue;
-    }
+    if (!name || !name.startsWith('$ACTION_')) continue;
 
     return {
       tokenName: name,
@@ -168,7 +118,7 @@ async function discoverActionDescriptor(baseUrlValue, actionPagePath) {
 }
 
 async function invokeServerAction(baseUrlValue, descriptor, payload) {
-  const body = new URLSearchParams();
+  const body = new FormData();
   body.set(descriptor.tokenName, descriptor.tokenValue);
 
   for (const [key, value] of Object.entries(payload)) {
@@ -178,34 +128,68 @@ async function invokeServerAction(baseUrlValue, descriptor, payload) {
   const response = await fetch(`${baseUrlValue}${descriptor.pagePath}`, {
     method: 'POST',
     headers: {
-      'content-type': 'application/x-www-form-urlencoded',
+      accept: 'text/html',
       origin: baseUrlValue,
+      referer: `${baseUrlValue}${descriptor.pagePath}`,
     },
     redirect: 'manual',
-    body: body.toString(),
+    body,
   });
 
-  if (response.ok || response.status === 303) {
-    return;
+  if (response.status >= 300 && response.status < 400) {
+    return {
+      redirectLocation: response.headers.get('location'),
+      html: '',
+    };
+  }
+
+  if (response.ok) {
+    return {
+      redirectLocation: '',
+      html: await response.text(),
+    };
   }
 
   const text = await response.text();
   throw new Error(`HTTP ${response.status} while invoking server action\n${text}`);
 }
 
-async function fetchReproState(baseUrlValue, actionPagePath) {
+async function fetchReproResult(baseUrlValue, actionPagePath) {
   const html = await fetchText(`${baseUrlValue}${actionPagePath}`);
-  const match = html.match(/<pre[^>]*id=(["'])repro-state\1[^>]*>([\s\S]*?)<\/pre>/i);
+  const result = parseReproResultFromHtml(html);
+  if (!result) {
+    throw new Error(`Could not find #repro-result at ${actionPagePath}`);
+  }
+
+  return result;
+}
+
+function parseReproResultFromHtml(html) {
+  const match = html.match(/<pre[^>]*id=(["'])repro-result\1[^>]*>([\s\S]*?)<\/pre>/i);
   if (!match) {
-    throw new Error(`Could not find #repro-state at ${actionPagePath}`);
+    return null;
   }
 
   const payload = decodeHtml(match[2]);
   try {
     return payload ? JSON.parse(payload) : {};
   } catch (error) {
-    throw new Error(`Invalid JSON in #repro-state: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(`Invalid JSON in #repro-result: ${error instanceof Error ? error.message : String(error)}`);
   }
+}
+
+function parseReproResultFromLocation(location) {
+  if (!location) return null;
+
+  const url = new URL(location, baseUrl);
+  const heapUsedStart = Number(url.searchParams.get('heapUsedStart'));
+  const heapUsedEnd = Number(url.searchParams.get('heapUsedEnd'));
+
+  if (!Number.isFinite(heapUsedStart) || !Number.isFinite(heapUsedEnd)) {
+    return null;
+  }
+
+  return { heapUsedStart, heapUsedEnd };
 }
 
 async function fetchText(url, init) {

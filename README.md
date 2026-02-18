@@ -1,6 +1,9 @@
 # Next.js dev pendingOperations repro
 
-Minimal reproducible example for suspected dev-mode memory retention in Next.js/React Server Actions async tracking (`pendingOperations`).
+Minimal repro focused on one console-heavy async workload, exposed through:
+
+- an API route wrapper
+- a Server Action wrapper
 
 ## Versions
 
@@ -15,7 +18,7 @@ pnpm install
 pnpm run dev
 ```
 
-This starts Next dev on `http://localhost:8136` with inspect + GC enabled.
+This starts Next dev on `http://localhost:8136` with `--expose-gc`.
 
 ## Reproduce drift
 
@@ -27,27 +30,19 @@ pnpm run repro:server-action
 pnpm run repro:api
 ```
 
-The script prints:
+Both scripts print:
 
-- `heapUsedStart`: heap after a reset + 3 forced GCs
-- `heapUsedEnd`: heap after all repro requests + 3 forced GCs
+- `heapUsedStart`
+- `heapUsedEnd`
 
-Both values are taken from the Next dev process and can be compared directly.
+Both values come from the same shared repro execution path.
 
 ## Repro surface
 
-- `GET/POST /api/repro/next-dev-pending-operations`: API-driven repro path
-- `GET /repro-server-actions`: page with a form-bound Server Action
-- `POST /repro-server-actions`: form submission path used to invoke the Server Action
+- `POST /api/repro/next-dev-pending-operations`: tiny API wrapper
+- `POST /repro-server-actions`: tiny Server Action wrapper
 
-Both paths execute the same console-heavy async batch (`runReproBatch`).
-
-The runner submits:
-
-- `action`: `request`, `status`, `reset`
-- `ready`: `race`, `event`, `none`
-- `depth`, `parallel`, `logEvery`, `stepDelayMs`
-- `gc`, `gcPasses`
+Both wrappers call `runReproScenario` in `lib/reproScenario.js`.
 
 ## Notes
 
