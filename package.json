@@ -2,6 +2,7 @@
   "name": "nextjs-dev-pending-operations-repro",
   "private": true,
   "version": "0.0.1",
+  "type": "module",
   "description": "Minimal Next.js dev-mode memory retention repro for RSC pendingOperations tracking",
   "scripts": {
     "dev": "NODE_OPTIONS='--expose-gc' NEXT_TELEMETRY_DISABLED=1 next dev -p 8136 --inspect",

@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { normalizeReproOptions } from '../lib/reproScenario.js';
+
 const DEFAULT_CONFIG = {
   baseUrl: 'http://localhost:8136',
   driver: 'server-action',
@@ -15,16 +17,22 @@ const targetPath = normalizePath(
       ? process.env.REPRO_API_PATH || DEFAULT_CONFIG.apiPath
       : process.env.REPRO_SERVER_ACTION_PATH || DEFAULT_CONFIG.serverActionPath),
 );
-const options = Object.fromEntries(
-  [
-    ['loops', process.env.REPRO_LOOPS],
-    ['depth', process.env.REPRO_DEPTH],
-    ['parallel', process.env.REPRO_PARALLEL],
-    ['ready', process.env.REPRO_READY],
-    ['logEvery', process.env.REPRO_LOG_EVERY],
-    ['stepDelayMs', process.env.REPRO_STEP_DELAY_MS],
-  ].filter(([, value]) => value !== undefined && value !== null && value !== ''),
-);
+const options = normalizeReproOptions({
+  loops: process.env.REPRO_LOOPS,
+  depth: process.env.REPRO_DEPTH,
+  parallel: process.env.REPRO_PARALLEL,
+  ready: process.env.REPRO_READY,
+  logEvery: process.env.REPRO_LOG_EVERY,
+  stepDelayMs: process.env.REPRO_STEP_DELAY_MS,
+});
+const requestPayload = {
+  loops: options.loops,
+  depth: options.depth,
+  parallel: options.parallel,
+  ready: options.readyMode,
+  logEvery: options.logEvery,
+  stepDelayMs: options.stepDelayMs,
+};
 
 const result = driver === 'api' ? await runViaApi() : await runViaServerAction();
 console.log(`heapUsedStart ${numberOrZero(result.heapUsedStart)}`);
@@ -32,7 +40,7 @@ console.log(`heapUsedEnd ${numberOrZero(result.heapUsedEnd)}`);
 
 async function runViaApi() {
   const url = new URL(`${baseUrl}${targetPath}`);
-  for (const [key, value] of Object.entries(options)) {
+  for (const [key, value] of Object.entries(requestPayload)) {
     url.searchParams.set(key, String(value));
   }
 
@@ -41,22 +49,22 @@ async function runViaApi() {
 
 async function runViaServerAction() {
   const descriptor = await discoverActionDescriptor(baseUrl, targetPath);
-  const { redirectLocation, html } = await invokeServerAction(baseUrl, descriptor, options);
-  let snapshot = parseReproResultFromLocation(redirectLocation);
-  if (!snapshot && html) {
-    snapshot = parseReproResultFromHtml(html);
-  }
-  if (!snapshot) {
-    const fallbackPath = redirectLocation
-      ? `${new URL(redirectLocation, baseUrl).pathname}${new URL(redirectLocation, baseUrl).search}`
-      : targetPath;
-    snapshot = await fetchReproResult(baseUrl, fallbackPath);
-  }
-  if (typeof snapshot.heapUsedStart !== 'number' || typeof snapshot.heapUsedEnd !== 'number') {
-    throw new Error(`Server Action did not produce a repro result at ${targetPath}`);
+  const perActionPayload = { ...requestPayload, loops: 1 };
+  let heapUsedStart = null;
+  let heapUsedEnd = null;
+
+  for (let i = 0; i < options.loops; i++) {
+    const snapshot = await invokeAndReadSnapshot(descriptor, perActionPayload);
+    if (heapUsedStart === null) {
+      heapUsedStart = snapshot.heapUsedStart;
+    }
+    heapUsedEnd = snapshot.heapUsedEnd;
   }
 
-  return snapshot;
+  return {
+    heapUsedStart: heapUsedStart ?? 0,
+    heapUsedEnd: heapUsedEnd ?? 0,
+  };
 }
 
 function normalizePath(value) {
@@ -145,6 +153,25 @@ async function invokeServerAction(baseUrlValue, descriptor, payload) {
 
   const text = await response.text();
   throw new Error(`HTTP ${response.status} while invoking server action\n${text}`);
+}
+
+async function invokeAndReadSnapshot(descriptor, payload) {
+  const { redirectLocation, html } = await invokeServerAction(baseUrl, descriptor, payload);
+  let snapshot = parseReproResultFromLocation(redirectLocation);
+  if (!snapshot && html) {
+    snapshot = parseReproResultFromHtml(html);
+  }
+  if (!snapshot) {
+    const fallbackPath = redirectLocation
+      ? `${new URL(redirectLocation, baseUrl).pathname}${new URL(redirectLocation, baseUrl).search}`
+      : targetPath;
+    snapshot = await fetchReproResult(baseUrl, fallbackPath);
+  }
+  if (typeof snapshot.heapUsedStart !== 'number' || typeof snapshot.heapUsedEnd !== 'number') {
+    throw new Error(`Server Action did not produce a repro result at ${targetPath}`);
+  }
+
+  return snapshot;
 }
 
 async function fetchReproResult(baseUrlValue, actionPagePath) {
