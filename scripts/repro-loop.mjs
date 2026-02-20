@@ -1,30 +1,29 @@
 #!/usr/bin/env node
 
-const [
-  baseUrlArg = 'http://localhost:8136',
-  loopsArg = '400',
-  depthArg = '250',
-  parallelArg = '1',
-  readyArg = 'race',
-  logEveryArg = '250',
-  stepDelayMsArg = '0',
-  driverArg = 'server-action',
-  targetPathArg = '',
-] = process.argv.slice(2);
-
-const baseUrl = baseUrlArg.replace(/\/$/, '');
-const options = {
-  loops: asInt(loopsArg, 400, 1, 10000),
-  depth: asInt(depthArg, 250, 1, 10000),
-  parallel: asInt(parallelArg, 1, 1, 32),
-  ready: readyArg === 'event' || readyArg === 'none' ? readyArg : 'race',
-  logEvery: asInt(logEveryArg, 250, 1, 100000),
-  stepDelayMs: asInt(stepDelayMsArg, 0, 0, 1000),
+const DEFAULT_CONFIG = {
+  baseUrl: 'http://localhost:8136',
+  driver: 'server-action',
+  apiPath: '/api/repro/next-dev-pending-operations',
+  serverActionPath: '/repro-server-actions',
 };
 
-const driver = driverArg === 'api' ? 'api' : 'server-action';
+const driver = process.env.REPRO_DRIVER === 'api' ? 'api' : DEFAULT_CONFIG.driver;
+const baseUrl = (process.env.REPRO_BASE_URL || DEFAULT_CONFIG.baseUrl).replace(/\/$/, '');
 const targetPath = normalizePath(
-  targetPathArg || (driver === 'api' ? '/api/repro/next-dev-pending-operations' : '/repro-server-actions'),
+  process.env.REPRO_TARGET_PATH ||
+    (driver === 'api'
+      ? process.env.REPRO_API_PATH || DEFAULT_CONFIG.apiPath
+      : process.env.REPRO_SERVER_ACTION_PATH || DEFAULT_CONFIG.serverActionPath),
+);
+const options = Object.fromEntries(
+  [
+    ['loops', process.env.REPRO_LOOPS],
+    ['depth', process.env.REPRO_DEPTH],
+    ['parallel', process.env.REPRO_PARALLEL],
+    ['ready', process.env.REPRO_READY],
+    ['logEvery', process.env.REPRO_LOG_EVERY],
+    ['stepDelayMs', process.env.REPRO_STEP_DELAY_MS],
+  ].filter(([, value]) => value !== undefined && value !== null && value !== ''),
 );
 
 const result = driver === 'api' ? await runViaApi() : await runViaServerAction();
@@ -32,12 +31,12 @@ console.log(`heapUsedStart ${numberOrZero(result.heapUsedStart)}`);
 console.log(`heapUsedEnd ${numberOrZero(result.heapUsedEnd)}`);
 
 async function runViaApi() {
-  const query = new URLSearchParams();
+  const url = new URL(`${baseUrl}${targetPath}`);
   for (const [key, value] of Object.entries(options)) {
-    query.set(key, String(value));
+    url.searchParams.set(key, String(value));
   }
 
-  return fetchJson(`${baseUrl}${targetPath}?${query.toString()}`, { method: 'POST' });
+  return fetchJson(url.toString(), { method: 'POST' });
 }
 
 async function runViaServerAction() {
@@ -61,14 +60,8 @@ async function runViaServerAction() {
 }
 
 function normalizePath(value) {
-  if (!value) return '/repro-server-actions';
+  if (!value) return DEFAULT_CONFIG.serverActionPath;
   return value.startsWith('/') ? value : `/${value}`;
-}
-
-function asInt(raw, fallback, min, max) {
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed)) return fallback;
-  return Math.min(max, Math.max(min, Math.trunc(parsed)));
 }
 
 function numberOrZero(value) {
