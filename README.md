@@ -20,7 +20,7 @@ pnpm run dev
 
 This starts Next dev on `http://localhost:8136` with `--expose-gc`.
 
-## Reproduce drift
+## Run benchmark
 
 In another terminal:
 
@@ -30,12 +30,7 @@ pnpm run repro:server-action
 pnpm run repro:api
 ```
 
-Both scripts print:
-
-- `heapUsedStart`
-- `heapUsedEnd`
-
-Both values come from the same shared repro execution path.
+Both scripts run the same shared repro workload. Success is exit code `0`.
 
 ## Repro surface
 

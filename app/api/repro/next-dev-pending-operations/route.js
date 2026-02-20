@@ -7,9 +7,9 @@ async function handle(request) {
 
   const { searchParams } = new URL(request.url);
   const options = parseReproOptionsFromSearchParams(searchParams);
-  const result = await runReproScenario(options);
+  await runReproScenario(options);
 
-  return Response.json({ ok: true, ...result });
+  return Response.json({ ok: true });
 }
 
 export async function GET(request) {
