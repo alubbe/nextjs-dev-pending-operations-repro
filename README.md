@@ -32,10 +32,9 @@ pnpm run repro:api
 
 Both scripts print:
 
-- `heapUsedStart`
-- `heapUsedEnd`
+- `ok true`
 
-Both values come from the same shared repro execution path.
+The status output comes from the same shared repro execution path.
 
 ## Repro surface
 
