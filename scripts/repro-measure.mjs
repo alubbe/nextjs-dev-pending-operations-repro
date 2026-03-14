@@ -5,6 +5,7 @@ import { runReproRequest } from './repro-loop.mjs';
 const DEFAULTS = {
   baseUrl: 'http://localhost:8136',
   statusPath: '/api/repro/next-dev-pending-operations',
+  action: 'status',
   runs: 1,
   settleMs: 10000,
   gcPasses: 3,
@@ -18,6 +19,7 @@ const DEFAULTS = {
 const config = {
   baseUrl: (process.env.REPRO_BASE_URL || DEFAULTS.baseUrl).replace(/\/$/, ''),
   statusPath: normalizePath(process.env.REPRO_STATUS_PATH || DEFAULTS.statusPath),
+  action: process.env.REPRO_STATUS_ACTION || DEFAULTS.action,
   runs: clampInt(process.env.REPRO_MEASURE_RUNS, DEFAULTS.runs, 0, 1000),
   settleMs: clampInt(process.env.REPRO_MEASURE_SETTLE_MS, DEFAULTS.settleMs, 0, 600000),
   gcPasses: clampInt(process.env.REPRO_MEASURE_GC_PASSES, DEFAULTS.gcPasses, 1, 20),
@@ -49,7 +51,7 @@ if (!config.measureOnly) {
 
 async function takeMeasurement(label, { snapshot }) {
   const url = new URL(`${config.baseUrl}${config.statusPath}`);
-  url.searchParams.set('action', 'status');
+  url.searchParams.set('action', config.action);
   url.searchParams.set('gc', '1');
   url.searchParams.set('gcPasses', String(config.gcPasses));
   url.searchParams.set('settleMs', String(config.settleMs));
@@ -99,6 +101,7 @@ function printMeasurement(measurement, baseline = null) {
       deltaPhysical === null ? null : `deltaPhysical=${formatSignedMiB(deltaPhysical)}`,
       `nativeContexts=${measurement.heap.numberOfNativeContexts}`,
       `detachedContexts=${measurement.heap.numberOfDetachedContexts}`,
+      formatAsyncDebug(measurement.asyncDebug),
       measurement.snapshotPath ? `snapshot=${measurement.snapshotPath}` : null,
     ]
       .filter(Boolean)
@@ -137,4 +140,70 @@ function formatMiB(bytes) {
 function formatSignedMiB(bytes) {
   const value = (bytes / (1024 * 1024)).toFixed(1);
   return `${bytes >= 0 ? '+' : ''}${value}MiB`;
+}
+
+function formatAsyncDebug(asyncDebug) {
+  if (!asyncDebug) return null;
+
+  return [
+    `pendingOps=${asyncDebug.pendingOperationsSize}`,
+    `lastRanAwait=${asyncDebug.hasLastRanAwait ? asyncDebug.lastRanAwaitTag : 'null'}`,
+    `pendingNodes=${asyncDebug.pendingReachableNodeCount}`,
+    `lastRanAwaitNodes=${asyncDebug.lastRanAwaitReachableNodeCount}`,
+    `totalAsyncNodes=${asyncDebug.totalReachableNodeCount}`,
+    formatCountsByTag(asyncDebug.countsByTag),
+    formatCountsByState(asyncDebug.countsByState),
+    formatCleanupHits(asyncDebug.cleanupHits),
+    formatTopRoots('allRoots', asyncDebug.topRoots),
+    formatTopKeepRoots(asyncDebug.topKeepRoots),
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+function formatCountsByTag(countsByTag) {
+  if (!countsByTag || typeof countsByTag !== 'object') return null;
+
+  const entries = Object.entries(countsByTag).sort(([a], [b]) => a.localeCompare(b));
+  if (entries.length === 0) return 'tags={}';
+  return `tags={${entries.map(([tag, count]) => `${tag}:${count}`).join(',')}}`;
+}
+
+function formatCountsByState(countsByState) {
+  if (!countsByState || typeof countsByState !== 'object') return null;
+
+  const entries = Object.entries(countsByState).sort(([a], [b]) => a.localeCompare(b));
+  if (entries.length === 0) return 'states={}';
+  return `states={${entries.map(([state, count]) => `${state}:${count}`).join(',')}}`;
+}
+
+function formatCleanupHits(cleanupHits) {
+  if (!cleanupHits || typeof cleanupHits !== 'object') return null;
+
+  const entries = Object.entries(cleanupHits).sort(([a], [b]) => a.localeCompare(b));
+  if (entries.length === 0) return null;
+  return `cleanup={${entries.map(([name, count]) => `${name}:${count}`).join(',')}}`;
+}
+
+function formatTopKeepRoots(topKeepRoots) {
+  return formatTopRoots('roots', topKeepRoots);
+}
+
+function formatTopRoots(label, roots) {
+  if (!Array.isArray(roots) || roots.length === 0) return null;
+
+  return `${label}=${roots
+    .map(root =>
+      [
+        root.asyncId,
+        root.type || '?',
+        root.state,
+        `tag${root.tag}`,
+        `n${root.reachableNodeCount}`,
+        root.debugInfoSize ? `d${root.debugInfoSize}` : null,
+      ]
+        .filter(Boolean)
+        .join(':'),
+    )
+    .join('|')}`;
 }

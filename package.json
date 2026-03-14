@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "description": "Minimal Next.js dev-mode memory retention repro for RSC pendingOperations tracking",
   "scripts": {
-    "dev": "NODE_OPTIONS='--expose-gc' NEXT_TELEMETRY_DISABLED=1 next dev -p 8136 --inspect",
+    "dev": "NODE_OPTIONS='--require ./scripts/patch-next-dev-pending-operations.cjs --expose-gc' NEXT_TELEMETRY_DISABLED=1 next dev -p 8136 --inspect",
     "build": "next build",
     "start": "next start -p 8136",
     "repro:server-action": "REPRO_DRIVER=server-action node scripts/repro-loop.mjs",
