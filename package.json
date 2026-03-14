@@ -8,7 +8,10 @@
     "build": "next build",
     "start": "next start -p 8136",
     "repro:server-action": "REPRO_DRIVER=server-action node scripts/repro-loop.mjs",
-    "repro:api": "REPRO_DRIVER=api node scripts/repro-loop.mjs"
+    "repro:api": "REPRO_DRIVER=api node scripts/repro-loop.mjs",
+    "repro:server-action:measure": "REPRO_DRIVER=server-action node scripts/repro-measure.mjs",
+    "repro:api:measure": "REPRO_DRIVER=api node scripts/repro-measure.mjs",
+    "repro:measure:status": "REPRO_MEASURE_ONLY=1 node scripts/repro-measure.mjs"
   },
   "engines": {
     "node": ">=20.0.0"

@@ -36,9 +36,31 @@ Both scripts print:
 
 The status output comes from the same shared repro execution path.
 
+## Forced GC measurement
+
+To measure the leaking dev process itself, the API wrapper now exposes a dev-only status action that can:
+
+- wait for async follow-up work to settle
+- force GC a configurable number of times
+- report heap stats
+- optionally write a `.heapsnapshot` file
+
+The defaults match the current workflow: `settleMs=10000` and `gcPasses=3`.
+
+Examples:
+
+```bash
+pnpm run repro:measure:status
+REPRO_MEASURE_RUNS=3 pnpm run repro:server-action:measure
+REPRO_MEASURE_RUNS=3 REPRO_MEASURE_SNAPSHOT=1 pnpm run repro:server-action:measure
+```
+
+Snapshots are written under the OS temp dir in `nextjs-dev-pending-operations-repro/`.
+
 ## Repro surface
 
 - `POST /api/repro/next-dev-pending-operations`: tiny API wrapper
+- `GET /api/repro/next-dev-pending-operations?action=status`: dev-only settle + GC + measure endpoint
 - `POST /repro-server-actions`: tiny Server Action wrapper
 
 Both wrappers call `runReproScenario` in `lib/reproScenario.js`.

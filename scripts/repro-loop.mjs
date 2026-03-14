@@ -1,5 +1,8 @@
 #!/usr/bin/env node
 
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 const DEFAULT_CONFIG = {
   baseUrl: 'http://localhost:8136',
   driver: 'server-action',
@@ -26,8 +29,16 @@ const options = Object.fromEntries(
   ].filter(([, value]) => value !== undefined && value !== null && value !== ''),
 );
 
-const result = driver === 'api' ? await runViaApi() : await runViaServerAction();
-console.log(`ok ${result.ok === true ? 'true' : 'false'}`);
+const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isMain) {
+  const result = await runReproRequest();
+  console.log(`ok ${result.ok === true ? 'true' : 'false'}`);
+}
+
+export async function runReproRequest() {
+  return driver === 'api' ? runViaApi() : runViaServerAction();
+}
 
 async function runViaApi() {
   const url = new URL(`${baseUrl}${targetPath}`);
