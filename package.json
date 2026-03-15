@@ -10,6 +10,8 @@
     "repro:server-action": "REPRO_DRIVER=server-action node scripts/repro-loop.mjs",
     "repro:api": "REPRO_DRIVER=api node scripts/repro-loop.mjs",
     "repro:server-action:measure": "REPRO_DRIVER=server-action node scripts/repro-measure.mjs",
+    "repro:server-action:get-only:measure": "REPRO_SERVER_ACTION_PHASE=get-only node scripts/repro-server-action-phase-measure.mjs",
+    "repro:server-action:post-only:measure": "REPRO_SERVER_ACTION_PHASE=post-only node scripts/repro-server-action-phase-measure.mjs",
     "repro:api:measure": "REPRO_DRIVER=api node scripts/repro-measure.mjs",
     "repro:measure:status": "REPRO_MEASURE_ONLY=1 node scripts/repro-measure.mjs"
   },

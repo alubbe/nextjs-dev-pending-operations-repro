@@ -3,7 +3,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const DEFAULT_CONFIG = {
+export const DEFAULT_CONFIG = {
   baseUrl: 'http://localhost:8136',
   driver: 'server-action',
   apiPath: '/api/repro/next-dev-pending-operations',
@@ -11,14 +11,14 @@ const DEFAULT_CONFIG = {
 };
 
 const driver = process.env.REPRO_DRIVER === 'api' ? 'api' : DEFAULT_CONFIG.driver;
-const baseUrl = (process.env.REPRO_BASE_URL || DEFAULT_CONFIG.baseUrl).replace(/\/$/, '');
-const targetPath = normalizePath(
+export const baseUrl = (process.env.REPRO_BASE_URL || DEFAULT_CONFIG.baseUrl).replace(/\/$/, '');
+export const targetPath = normalizePath(
   process.env.REPRO_TARGET_PATH ||
     (driver === 'api'
       ? process.env.REPRO_API_PATH || DEFAULT_CONFIG.apiPath
       : process.env.REPRO_SERVER_ACTION_PATH || DEFAULT_CONFIG.serverActionPath),
 );
-const options = Object.fromEntries(
+export const options = Object.fromEntries(
   [
     ['loops', process.env.REPRO_LOOPS],
     ['depth', process.env.REPRO_DEPTH],
@@ -60,7 +60,7 @@ async function runViaServerAction() {
   return { ok: true };
 }
 
-function normalizePath(value) {
+export function normalizePath(value) {
   if (!value) return DEFAULT_CONFIG.serverActionPath;
   return value.startsWith('/') ? value : `/${value}`;
 }
@@ -80,7 +80,7 @@ function decodeHtml(text) {
     .replace(/&amp;/g, '&');
 }
 
-async function discoverActionDescriptor(baseUrlValue, actionPagePath) {
+export async function discoverActionDescriptor(baseUrlValue, actionPagePath) {
   const html = await fetchText(`${baseUrlValue}${actionPagePath}`);
   const formMatch = html.match(/<form[^>]*id=(["'])repro-action-form\1[^>]*>([\s\S]*?)<\/form>/i);
   if (!formMatch) {
@@ -107,7 +107,7 @@ async function discoverActionDescriptor(baseUrlValue, actionPagePath) {
   throw new Error(`Could not find server action hidden token in #repro-action-form at ${actionPagePath}`);
 }
 
-async function invokeServerAction(baseUrlValue, descriptor, payload) {
+export async function invokeServerAction(baseUrlValue, descriptor, payload) {
   const body = new FormData();
   body.set(descriptor.tokenName, descriptor.tokenValue);
 
@@ -138,7 +138,7 @@ async function invokeServerAction(baseUrlValue, descriptor, payload) {
   throw new Error(`HTTP ${response.status} while invoking server action\n${text}`);
 }
 
-async function fetchText(url, init) {
+export async function fetchText(url, init) {
   const response = await fetch(url, init);
   const text = await response.text();
 
