@@ -1,9 +1,12 @@
-# Next.js dev pendingOperations repro
+# Next.js dev redirect leak repro
 
-Minimal repro focused on one console-heavy async workload, exposed through:
+This repo isolates one case:
 
-- an API route wrapper
-- a Server Action wrapper
+- a non-fetch Server Action in dev mode
+- the action creates a large async chain
+- the action ends with `redirect('/repro-server-actions')`
+
+There is no API route, no custom measurement endpoint, and no patching of Next or React.
 
 ## Versions
 
@@ -18,34 +21,39 @@ pnpm install
 pnpm run dev
 ```
 
-This starts Next dev on `http://localhost:8136` with `--expose-gc`.
+This starts Next dev on `http://localhost:8136` with the Node inspector on `127.0.0.1:9229`.
 
-## Reproduce drift
+To start the same repro with the branch-specific redirect fix applied through a local preload
+patch, use:
+
+```bash
+pnpm run dev:redirect-fix
+```
 
 In another terminal:
 
 ```bash
-pnpm run repro:server-action
-# or
-pnpm run repro:api
+pnpm run repro
+REPRO_RUNS=3 pnpm run repro
 ```
 
-Both scripts print:
+The driver does:
 
-- `heapUsedStart`
-- `heapUsedEnd`
+1. one initial `GET /repro-server-actions` to discover the hidden action token
+2. repeated `POST /repro-server-actions` calls with `redirect: 'manual'`
 
-Both values come from the same shared repro execution path.
+That avoids the unrelated dev-only memory growth caused by re-rendering the page after every
+redirect.
 
-## Repro surface
+## Manual repro flow
 
-- `POST /api/repro/next-dev-pending-operations`: tiny API wrapper
-- `POST /repro-server-actions`: tiny Server Action wrapper
+1. Start `pnpm run dev`.
+2. Connect Chrome DevTools to the Node process on port `9229`.
+3. Run `pnpm run repro`.
+4. Wait about 10 seconds for async follow-up work to settle.
+5. Force GC a few times and take a heap snapshot.
+6. Run `REPRO_RUNS=3 pnpm run repro`.
+7. Wait about 10 seconds again, force GC a few times, and take another heap snapshot.
 
-Both wrappers call `runReproScenario` in `lib/reproScenario.js`.
-
-## Notes
-
-- No external API calls are used.
-- No production keys are required.
-- The Server Action page is intended for dev-mode repro only.
+The leak should show up after the redirected action runs, without needing to reload the page in a
+browser after each redirect.
