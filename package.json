@@ -5,6 +5,7 @@
   "description": "Minimal Next.js dev-mode repro for an MPA server-action redirect memory leak",
   "scripts": {
     "dev": "NEXT_TELEMETRY_DISABLED=1 next dev -p 8136 --inspect",
+    "dev:redirect-fix": "NODE_OPTIONS='--require ./scripts/patch-next-redirect-fix.cjs --expose-gc' NEXT_TELEMETRY_DISABLED=1 next dev -p 8136 --inspect",
     "build": "next build",
     "start": "next start -p 8136",
     "repro": "node scripts/repro.mjs"

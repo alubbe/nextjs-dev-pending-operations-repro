@@ -23,6 +23,13 @@ pnpm run dev
 
 This starts Next dev on `http://localhost:8136` with the Node inspector on `127.0.0.1:9229`.
 
+To start the same repro with the branch-specific redirect fix applied through a local preload
+patch, use:
+
+```bash
+pnpm run dev:redirect-fix
+```
+
 In another terminal:
 
 ```bash
